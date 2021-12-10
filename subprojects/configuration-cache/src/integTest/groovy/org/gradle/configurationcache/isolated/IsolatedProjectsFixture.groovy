@@ -26,19 +26,19 @@ import org.gradle.tooling.provider.model.internal.QueryToolingModelBuildOperatio
 
 class IsolatedProjectsFixture {
     private final AbstractIsolatedProjectsIntegrationTest spec
+    private final ConfigurationCacheFixture fixture
     private final BuildOperationsFixture buildOperations
     private final ConfigurationCacheBuildOperationsFixture configurationCacheBuildOperations
-    private final ConfigurationCacheFixture fixture
 
     IsolatedProjectsFixture(AbstractIsolatedProjectsIntegrationTest spec) {
         this.spec = spec
-        this.buildOperations = new BuildOperationsFixture(spec.executer, spec.temporaryFolder)
-        this.configurationCacheBuildOperations = new ConfigurationCacheBuildOperationsFixture(buildOperations)
         this.fixture = new ConfigurationCacheFixture(spec)
+        this.buildOperations = fixture.buildOperations
+        this.configurationCacheBuildOperations = fixture.configurationCacheBuildOperations
     }
 
     /**
-     * Asserts that the cache entry is written with no problems.
+     * Asserts that the cache entry was written with no problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -48,18 +48,15 @@ class IsolatedProjectsFixture {
         closure.delegate = details
         closure()
 
-        assertHasStoreReason(details)
-        spec.postBuildOutputContains("Configuration cache entry stored.")
+        fixture.assertStateStored(details)
+
         assertHasWarningThatIncubatingFeatureUsed()
-
-        configurationCacheBuildOperations.assertStateStored()
-
         assertProjectsConfigured(details)
         assertModelsQueried(details)
     }
 
     /**
-     * Asserts that the cache entry is written with some problems.
+     * Asserts that the cache entry was written with some problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -77,7 +74,7 @@ class IsolatedProjectsFixture {
     }
 
     /**
-     * Asserts that the cache entry is not written due to some problems.
+     * Asserts that the cache entry was written but discarded due to some problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -95,7 +92,7 @@ class IsolatedProjectsFixture {
     }
 
     /**
-     * Asserts that the cache entry is discarded and stored with no problems.
+     * Asserts that the cache entry was discarded and stored again with no problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -109,7 +106,7 @@ class IsolatedProjectsFixture {
     }
 
     /**
-     * Asserts that the cache entry is updated with no problems.
+     * Asserts that the cache entry was updated with no problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -123,7 +120,7 @@ class IsolatedProjectsFixture {
     }
 
     /**
-     * Asserts that the cache entry is updated with the given problems.
+     * Asserts that the cache entry was updated with the given problems.
      *
      * Also asserts that the expected set of projects is configured, the expected models are queried
      * and the appropriate console logging, reports and build operations are generated.
@@ -137,12 +134,10 @@ class IsolatedProjectsFixture {
     }
 
     private void doStateStored(StoreInvalidationDetails details, String storeAction) {
-        assertHasRecreateReason(details)
+        fixture.assertStateRecreated(details, details)
         spec.postBuildOutputContains("Configuration cache entry $storeAction.")
+
         assertHasWarningThatIncubatingFeatureUsed()
-
-        configurationCacheBuildOperations.assertStateStored()
-
         assertProjectsConfigured(details)
         assertModelsQueried(details)
     }
@@ -191,7 +186,7 @@ class IsolatedProjectsFixture {
     }
 
     /**
-     * Asserts that the cache entry is loaded and no projects are configured.
+     * Asserts that the cache entry was loaded and no projects are configured.
      *
      * Also asserts that the appropriate console logging, reports and build operations are generated.
      */
@@ -200,14 +195,6 @@ class IsolatedProjectsFixture {
 
         assertHasWarningThatIncubatingFeatureUsed()
         assertNoModelsQueried()
-    }
-
-    private void assertHasStoreReason(StoreDetails details) {
-        if (details.runsTasks) {
-            spec.outputContains("Calculating task graph as no configuration cache is available for tasks:")
-        } else {
-            spec.outputContains("Creating tooling model as no configuration cache is available for the requested model")
-        }
     }
 
     private assertHasProblems(int totalProblems, List<ConfigurationCacheFixture.ProblemDetails> problems) {
@@ -322,27 +309,7 @@ class IsolatedProjectsFixture {
     static class StoreWithProblemsDetails extends StoreDetails implements ConfigurationCacheFixture.HasProblems {
     }
 
-    static class StoreInvalidationDetails extends StoreDetails {
-        List<String> changedFiles = []
-        boolean changedGradleProperty
-        String changedSystemProperty
-        String changedTask
-
-        void fileChanged(String name) {
-            changedFiles.add(name)
-        }
-
-        void taskInputChanged(String name) {
-            changedTask = name
-        }
-
-        void gradlePropertyChanged() {
-            changedGradleProperty = true
-        }
-
-        void systemPropertyChanged(String name) {
-            changedSystemProperty = name
-        }
+    static class StoreInvalidationDetails extends StoreDetails implements ConfigurationCacheFixture.HasInvalidationReason {
     }
 
     static class StoreRecreatedDetails extends StoreInvalidationDetails {
