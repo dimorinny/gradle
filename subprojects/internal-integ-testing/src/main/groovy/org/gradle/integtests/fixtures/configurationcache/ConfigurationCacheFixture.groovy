@@ -55,8 +55,8 @@ class ConfigurationCacheFixture {
      *
      * Also asserts that the appropriate console logging, reports and build operations are generated.
      */
-    void assertStateStored(@DelegatesTo(StoreDetails) Closure closure = {}) {
-        def details = new StoreDetails()
+    void assertStateStored(@DelegatesTo(StateStoreDetails) Closure closure = {}) {
+        def details = new StateStoreDetails()
         closure.delegate = details
         closure()
 
@@ -68,7 +68,7 @@ class ConfigurationCacheFixture {
         assertHasStoreReason(details)
         configurationCacheBuildOperations.assertStateStored()
 
-        spec.postBuildOutputContains("Configuration cache entry stored.")
+        spec.postBuildOutputContains("Configuration cache entry ${details.storeAction}.")
 
         assertHasNoProblems()
     }
@@ -78,8 +78,8 @@ class ConfigurationCacheFixture {
      *
      * Also asserts that the appropriate console logging, reports and build operations are generated.
      */
-    void assertStateStoredWithProblems(@DelegatesTo(StoreWithProblemsDetails) Closure closure) {
-        def details = new StoreWithProblemsDetails()
+    void assertStateStoredWithProblems(@DelegatesTo(StateStoreWithProblemsDetails) Closure closure) {
+        def details = new StateStoreWithProblemsDetails()
         closure.delegate = details
         closure()
 
@@ -91,7 +91,7 @@ class ConfigurationCacheFixture {
         assertHasStoreReason(details)
         configurationCacheBuildOperations.assertStateStored()
 
-        spec.result.assertHasPostBuildOutput("Configuration cache entry stored with ${details.problemsString}.")
+        spec.result.assertHasPostBuildOutput("Configuration cache entry ${details.storeAction}.")
 
         assertHasProblems(problemDetails)
     }
@@ -101,8 +101,8 @@ class ConfigurationCacheFixture {
      *
      * Also asserts that the appropriate console logging, reports and build operations are generated.
      */
-    void assertStateStoredAndDiscarded(@DelegatesTo(StoreWithProblemsDetails) Closure closure) {
-        def details = new StoreWithProblemsDetails()
+    void assertStateStoredAndDiscarded(@DelegatesTo(StateDiscardedWithProblemsDetails) Closure closure) {
+        def details = new StateDiscardedWithProblemsDetails()
         closure.delegate = details
         closure()
 
@@ -114,13 +114,7 @@ class ConfigurationCacheFixture {
         assertHasStoreReason(details)
         configurationCacheBuildOperations.assertStateStored()
 
-        def totalProblems = problemDetails.totalProblems
-        def message
-        if (totalProblems == 1) {
-            message = "Configuration cache entry discarded with 1 problem."
-        } else {
-            message = "Configuration cache entry discarded with ${totalProblems} problems."
-        }
+        def message = "Configuration cache entry ${details.storeAction}."
         boolean isFailure = spec.result instanceof ExecutionFailure
         if (isFailure) {
             spec.outputContains(message)
@@ -134,21 +128,43 @@ class ConfigurationCacheFixture {
     /**
      * Asserts that the cache entry was discarded due to some input change and stored again with no problems.
      *
-     * Also asserts that the expected set of projects is configured, the expected models are queried
-     * and the appropriate console logging, reports and build operations are generated.
+     * Also asserts that the appropriate console logging, reports and build operations are generated.
      */
-    void assertStateRecreated(@DelegatesTo(StoreRecreateDetails) Closure closure) {
-        def details = new StoreRecreateDetails()
+    void assertStateRecreated(@DelegatesTo(StateRecreateDetails) Closure closure) {
+        def details = new StateRecreateDetails()
         closure.delegate = details
         closure()
 
         assertStateRecreated(details, details)
+        assertHasWarningThatIncubatingFeatureUsed()
     }
 
     void assertStateRecreated(HasBuildActions details, HasInvalidationReason invalidationDetails) {
         assertHasRecreateReason(details, invalidationDetails)
         configurationCacheBuildOperations.assertStateStored()
+        spec.postBuildOutputContains("Configuration cache entry ${details.storeAction}.")
         assertHasNoProblems()
+    }
+
+    /**
+     * Asserts that the cache entry was discarded due to some input change and stored again with the given problems.
+     *
+     * Also asserts that the appropriate console logging, reports and build operations are generated.
+     */
+    void assertStateRecreatedWithProblems(@DelegatesTo(StateRecreateWithProblemsDetails) Closure closure) {
+        def details = new StateRecreateWithProblemsDetails()
+        closure.delegate = details
+        closure()
+
+        assertStateRecreatedWithProblems(details, details, details)
+        assertHasWarningThatIncubatingFeatureUsed()
+    }
+
+    void assertStateRecreatedWithProblems(HasBuildActions details, HasInvalidationReason invalidationDetails, HasProblems problemDetails) {
+        assertHasRecreateReason(details, invalidationDetails)
+        configurationCacheBuildOperations.assertStateStored()
+        spec.postBuildOutputContains("Configuration cache entry ${details.storeAction}.")
+        assertHasProblems(problemDetails)
     }
 
     /**
@@ -163,7 +179,7 @@ class ConfigurationCacheFixture {
 
     void assertStateLoaded(LoadDetails details) {
         spec.outputContains("Reusing configuration cache.")
-        spec.postBuildOutputContains("Configuration cache entry reused.")
+        spec.postBuildOutputContains("Configuration cache entry ${details.storeAction}.")
 
         configurationCacheBuildOperations.assertStateLoaded()
 
@@ -184,7 +200,7 @@ class ConfigurationCacheFixture {
 
         assertHasWarningThatIncubatingFeatureUsed()
         spec.outputContains("Reusing configuration cache.")
-        spec.postBuildOutputContains("Configuration cache entry reused with ${details.problemsString}.")
+        spec.postBuildOutputContains("Configuration cache entry ${details.storeAction}.")
 
         configurationCacheBuildOperations.assertStateLoaded()
 
@@ -310,6 +326,8 @@ class ConfigurationCacheFixture {
 
     trait HasBuildActions {
         boolean runsTasks = true
+
+        abstract String getStoreAction()
     }
 
     trait HasInvalidationReason {
@@ -335,18 +353,44 @@ class ConfigurationCacheFixture {
         }
     }
 
-    static class StoreDetails implements HasBuildActions {
+    static class StateStoreDetails implements HasBuildActions {
+        @Override
+        String getStoreAction() {
+            return "stored"
+        }
     }
 
-    static class StoreWithProblemsDetails extends StoreDetails implements HasProblems {
+    static class StateStoreWithProblemsDetails implements HasBuildActions, HasProblems {
+        @Override
+        String getStoreAction() {
+            return "stored with ${problemsString}"
+        }
     }
 
-    static class StoreRecreateDetails extends StoreDetails implements HasInvalidationReason {
+    static class StateDiscardedWithProblemsDetails implements HasBuildActions, HasProblems {
+        @Override
+        String getStoreAction() {
+            return "discarded with ${problemsString}"
+        }
     }
 
-    static class LoadDetails {
+    static class StateRecreateDetails extends StateStoreDetails implements HasInvalidationReason {
     }
 
-    static class LoadWithProblemsDetails extends LoadDetails implements HasProblems {
+    static class StateRecreateWithProblemsDetails extends StateStoreWithProblemsDetails implements HasInvalidationReason {
+    }
+
+    static class LoadDetails implements HasBuildActions {
+        @Override
+        String getStoreAction() {
+            return "reused"
+        }
+    }
+
+    static class LoadWithProblemsDetails implements HasBuildActions, HasProblems {
+        @Override
+        String getStoreAction() {
+            return "reused with ${problemsString}"
+        }
     }
 }
